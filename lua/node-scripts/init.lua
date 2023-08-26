@@ -114,11 +114,11 @@ local function runScript(script)
 			on_exit = function(job_id, exit_code, event)
 				if exit_code == 0 then
 					notify("Script '" .. fullCommand .. "' finished successfully.", vim.log.levels.INFO)
-				else
-					notify(
-						"Script '" .. fullCommand .. "' finished with exit code " .. exit_code .. ".",
-						vim.log.levels.ERROR
-					)
+					-- else
+					-- 	notify(
+					-- 		"Script '" .. fullCommand .. "' finished with exit code " .. exit_code .. ".",
+					-- 		vim.log.levels.ERROR
+					-- 	)
 				end
 			end,
 
