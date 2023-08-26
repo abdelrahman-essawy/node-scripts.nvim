@@ -19,10 +19,12 @@ local notify_warn_events = false
 local notify_error_events = true
 local notify_ready_events = true
 local notify_all_events = false
+local timeout = 3000
 
 local function notify(message, level)
 	vim.notify(message, level, {
 		title = pluginName,
+		timeout = timeout,
 	})
 end
 
@@ -122,6 +124,7 @@ local function runScript(script)
 
 			on_stdout = function(job_id, data, event)
 				local text = table.concat(data, "\n")
+
 				if notify_all_events then
 					notify(text, vim.log.levels.INFO)
 				end
