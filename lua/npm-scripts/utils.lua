@@ -1,5 +1,5 @@
-local config = require("node-scripts.config").DEFAULT_CONFIG
-local pluginName = require("node-scripts.config").pluginName
+local config = require("npm-scripts.config").DEFAULT_CONFIG
+local pluginName = require("npm-scripts.config").pluginName
 
 local function strip_ansi_escape_codes(text)
   return text:gsub("\27%[[%d;]+m", "")

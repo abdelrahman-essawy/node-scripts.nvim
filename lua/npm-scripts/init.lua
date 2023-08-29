@@ -5,15 +5,15 @@ local pickers = require("telescope.pickers")
 local sorters = require("telescope.sorters")
 local action_state = require("telescope.actions.state")
 
-local DEFAULT_CONFIG = require("node-scripts.config").DEFAULT_CONFIG
+local DEFAULT_CONFIG = require("npm-scripts.config").DEFAULT_CONFIG
 
-local notify = require("node-scripts.utils").notify
-local is_custom_event = require("node-scripts.utils").is_custom_event
-local is_ready_event = require("node-scripts.utils").is_ready_event
-local is_error_event = require("node-scripts.utils").is_error_event
-local is_warn_event = require("node-scripts.utils").is_warn_event
-local has_localhost_keyword = require("node-scripts.utils").has_localhost_keyword
-local has_ignored_keyword = require("node-scripts.utils").has_ignored_keyword
+local notify = require("npm-scripts.utils").notify
+local is_custom_event = require("npm-scripts.utils").is_custom_event
+local is_ready_event = require("npm-scripts.utils").is_ready_event
+local is_error_event = require("npm-scripts.utils").is_error_event
+local is_warn_event = require("npm-scripts.utils").is_warn_event
+local has_localhost_keyword = require("npm-scripts.utils").has_localhost_keyword
+local has_ignored_keyword = require("npm-scripts.utils").has_ignored_keyword
 
 local M = {}
 
@@ -176,7 +176,7 @@ end
 function M.setup(opts)
 	config = vim.tbl_extend("force", config, DEFAULT_CONFIG, opts or {})
 	vim.api.nvim_create_user_command("NS", M.run, { desc = "Run `ns` to show package.json scripts", force = true })
-	vim.keymap.set("n", "<leader>ns", ":lua require('node-scripts').run()<CR>", { silent = true, noremap = true })
+	vim.keymap.set("n", "<leader>ns", ":lua require('npm-scripts').run()<CR>", { silent = true, noremap = true })
 end
 
 return M

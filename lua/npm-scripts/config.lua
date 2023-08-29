@@ -1,4 +1,4 @@
-local pluginName = "node-scripts"
+local pluginName = "npm-scripts"
 
 local DEFAULT_CONFIG = {
   ready_events = {
