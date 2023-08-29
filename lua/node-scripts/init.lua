@@ -5,60 +5,21 @@ local pickers = require("telescope.pickers")
 local sorters = require("telescope.sorters")
 local action_state = require("telescope.actions.state")
 
-local pluginName = "node-scripts"
+local DEFAULT_CONFIG = require("node-scripts.config").DEFAULT_CONFIG
 
--- local function start_with_word(text, word)
--- 	local startIndex = string.find(text, word)
--- 	if startIndex == 1 then
--- 		return true
--- 	end
--- 	return false
--- end
+local notify = require("node-scripts.utils").notify
+local is_custom_event = require("node-scripts.utils").is_custom_event
+local is_ready_event = require("node-scripts.utils").is_ready_event
+local is_error_event = require("node-scripts.utils").is_error_event
+local is_warn_event = require("node-scripts.utils").is_warn_event
+local has_localhost_keyword = require("node-scripts.utils").has_localhost_keyword
+local has_ignored_keyword = require("node-scripts.utils").has_ignored_keyword
 
-local notify_warn_events = false
-local notify_error_events = true
-local notify_ready_events = true
-local notify_all_events = false
-local timeout = 3000
+local M = {}
 
-local function notify(message, level)
-	vim.notify(message, level, {
-		title = pluginName,
-		timeout = timeout,
-	})
-end
+local config = {}
 
-local function is_ready_event(text)
-	local POSSIBLE_WORDS = { "ready", "READY", "Ready" }
-	for _, word in ipairs(POSSIBLE_WORDS) do
-		if text:find(word) then
-			return true
-		end
-	end
-	return false
-end
-
-local function is_error_event(text)
-	local POSSIBLE_WORDS = { "error", "ERROR", "Error" }
-	for _, word in ipairs(POSSIBLE_WORDS) do
-		if text:find(word) then
-			return true
-		end
-	end
-	return false
-end
-
-local function is_warn_event(text)
-	local POSSIBLE_WORDS = { "warn", "warning", "WARN", "WARNING", "Warn", "Warning" }
-	for _, word in ipairs(POSSIBLE_WORDS) do
-		if text:find(word) then
-			return true
-		end
-	end
-	return false
-end
-
-local function findNearestPackageJson(path)
+M.find_nearest_package_json = function(path)
 	local function fileExists(filepath)
 		local file = io.open(filepath, "r")
 		if file then
@@ -69,29 +30,25 @@ local function findNearestPackageJson(path)
 		end
 	end
 
-	local packageJsonPath = path .. "/package.json"
-	if fileExists(packageJsonPath) then
-		return packageJsonPath
+	local package_json_path = path .. "/package.json"
+	if fileExists(package_json_path) then
+		return package_json_path
 	end
 
-	local parentPath = path:match("^(.*[/\\])[^/\\]+$")
-	if parentPath and parentPath ~= path then
-		return findNearestPackageJson(parentPath)
+	local parent_path = path:match("^(.*[/\\])[^/\\]+$")
+	if parent_path and parent_path ~= path then
+		return M.find_nearest_package_json(parent_path)
 	end
 
-	local srcPath = path .. "/src"
-	if fileExists(srcPath) then
-		return findNearestPackageJson(srcPath)
+	local src_path = path .. "/src"
+	if fileExists(src_path) then
+		return M.find_nearest_package_json(src_path)
 	end
 
 	return nil
 end
 
-local function choosenPackageManager()
-	return "npm"
-end
-
-local function readPackageJsonScripts(packageJsonPath)
+local function read_package_json_scripts(packageJsonPath)
 	local file = io.open(packageJsonPath, "r")
 	if file then
 		local content = file:read("*a")
@@ -106,43 +63,71 @@ local function readPackageJsonScripts(packageJsonPath)
 	return nil
 end
 
-local function runScript(script)
+M.execute_script = function(script)
 	if script then
-		local fullCommand = choosenPackageManager() .. " run " .. script
+		local fullCommand = config.package_manager .. " run " .. script
+
 		local job_id = vim.fn.jobstart(fullCommand, {
 
 			on_exit = function(job_id, exit_code, event)
 				if exit_code == 0 then
 					notify("Script '" .. fullCommand .. "' finished successfully.", vim.log.levels.INFO)
-					-- else
-					-- 	notify(
-					-- 		"Script '" .. fullCommand .. "' finished with exit code " .. exit_code .. ".",
-					-- 		vim.log.levels.ERROR
-					-- 	)
 				end
 			end,
 
 			on_stdout = function(job_id, data, event)
 				local text = table.concat(data, "\n")
 
-				if notify_all_events then
+				if config.notify_all_events then
 					notify(text, vim.log.levels.INFO)
 				end
-				if notify_ready_events and is_ready_event(text) then
+
+				if
+						not has_ignored_keyword(text, config.ready_events.IGNORED)
+						and config.ready_events.notify
+						and is_ready_event(text)
+						or has_localhost_keyword(text)
+				then
 					notify(text, vim.log.levels.INFO)
 				end
-				if notify_warn_events and is_warn_event(text) then
+
+				if
+						not has_ignored_keyword(text, config.warn_events.IGNORED)
+						and config.warn_events.notify
+						and is_warn_event(text)
+				then
 					notify(text, vim.log.levels.WARN)
+				end
+
+				if
+						not has_ignored_keyword(text, config.custom_events.IGNORED)
+						and config.custom_events.notify
+						and is_custom_event(text)
+				then
+					notify(text, vim.log.levels.INFO)
 				end
 			end,
 
 			on_stderr = function(job_id, data, event)
 				local text = table.concat(data, "\n")
 
-				if notify_all_events then
+				if config.notify_all_events then
 					notify(text, vim.log.levels.ERROR)
 				end
-				if notify_error_events and is_error_event(text) then
+
+				if
+						not has_ignored_keyword(text, config.error_events.IGNORED)
+						and config.error_events.notify
+						and is_error_event(text)
+				then
+					notify(text, vim.log.levels.ERROR)
+				end
+
+				if
+						not has_ignored_keyword(text, config.custom_events.IGNORED)
+						and config.custom_events.notify
+						and is_custom_event(text)
+				then
 					notify(text, vim.log.levels.ERROR)
 				end
 			end,
@@ -151,37 +136,47 @@ local function runScript(script)
 	end
 end
 
-local nearestPackageJsonPath = findNearestPackageJson(vim.fn.getcwd())
+M.run = function()
+	local nearest_package_json_path = M.find_nearest_package_json(vim.fn.getcwd())
 
-if nearestPackageJsonPath then
-	local scripts = readPackageJsonScripts(nearestPackageJsonPath)
+	if nearest_package_json_path then
+		local scripts = read_package_json_scripts(nearest_package_json_path)
 
-	if scripts then
-		local results = {}
-		for script, _ in pairs(scripts) do
-			table.insert(results, script)
+		if scripts then
+			local results = {}
+			for script, _ in pairs(scripts) do
+				table.insert(results, script)
+			end
+
+			pickers
+					.new({
+						prompt_title = "Scripts in package.json",
+						finder = finders.new_table({
+							results = results,
+						}),
+						sorter = sorters.get_generic_fuzzy_sorter(),
+						attach_mappings = function(prompt_bufnr, map)
+							actions.select_default:replace(function()
+								actions.close(prompt_bufnr)
+								local selection = action_state.get_selected_entry()
+								M.execute_script(selection[1])
+							end)
+							return true
+						end,
+					})
+					:find()
+		else
+			notify("No 'scripts' found in package.json.", vim.log.levels.WARN)
 		end
-
-		pickers
-				.new({
-					prompt_title = "Scripts in package.json",
-					finder = finders.new_table({
-						results = results,
-					}),
-					sorter = sorters.get_generic_fuzzy_sorter(),
-					attach_mappings = function(prompt_bufnr, map)
-						actions.select_default:replace(function()
-							actions.close(prompt_bufnr)
-							local selection = action_state.get_selected_entry()
-							runScript(selection[1])
-						end)
-						return true
-					end,
-				})
-				:find()
 	else
-		notify("No 'scripts' found in package.json.", vim.log.levels.WARN)
+		notify("No package.json found in the current directory or its parent directories.", vim.log.levels.WARN)
 	end
-else
-	notify("No package.json found in the current directory or its parent directories.", vim.log.levels.WARN)
 end
+
+function M.setup(opts)
+	config = vim.tbl_extend("force", config, DEFAULT_CONFIG, opts or {})
+	vim.api.nvim_create_user_command("NS", M.run, { desc = "Run `ns` to show package.json scripts", force = true })
+	vim.keymap.set("n", "<leader>ns", ":lua require('node-scripts').run()<CR>", { silent = true, noremap = true })
+end
+
+return M
