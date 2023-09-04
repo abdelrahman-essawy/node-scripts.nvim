@@ -8,43 +8,20 @@ local action_state = require("telescope.actions.state")
 local DEFAULT_CONFIG = require("npm-scripts.config").DEFAULT_CONFIG
 
 local notify = require("npm-scripts.utils").notify
-local is_custom_event = require("npm-scripts.utils").is_custom_event
-local is_ready_event = require("npm-scripts.utils").is_ready_event
-local is_error_event = require("npm-scripts.utils").is_error_event
-local is_warn_event = require("npm-scripts.utils").is_warn_event
-local has_localhost_keyword = require("npm-scripts.utils").has_localhost_keyword
-local has_ignored_keyword = require("npm-scripts.utils").has_ignored_keyword
+local has_keywords = require("npm-scripts.utils").has_keywords
 
 local M = {}
 
 local config = {}
 
-M.find_nearest_package_json = function(path)
-	local function fileExists(filepath)
-		local file = io.open(filepath, "r")
-		if file then
-			io.close(file)
-			return true
-		else
-			return false
-		end
+M.find_package_json_path = function(path)
+	if not path or path == "" then
+		return nil
 	end
-
-	local package_json_path = path .. "/package.json"
-	if fileExists(package_json_path) then
-		return package_json_path
+	local packageJsonPath = vim.fn.findfile("package.json", path .. ";")
+	if packageJsonPath ~= "" then
+		return packageJsonPath
 	end
-
-	local parent_path = path:match("^(.*[/\\])[^/\\]+$")
-	if parent_path and parent_path ~= path then
-		return M.find_nearest_package_json(parent_path)
-	end
-
-	local src_path = path .. "/src"
-	if fileExists(src_path) then
-		return M.find_nearest_package_json(src_path)
-	end
-
 	return nil
 end
 
@@ -63,13 +40,15 @@ local function read_package_json_scripts(packageJsonPath)
 	return nil
 end
 
+-- Execute a script using the configured package manager
 M.execute_script = function(script)
 	if script then
 		local fullCommand = config.package_manager .. " run " .. script
 
+		-- Start a job to run the script
 		local job_id = vim.fn.jobstart(fullCommand, {
-
 			on_exit = function(job_id, exit_code, event)
+				-- Notify when the job exits with a successful exit code
 				if exit_code == 0 then
 					notify("Script '" .. fullCommand .. "' finished successfully.", vim.log.levels.INFO)
 				end
@@ -78,32 +57,11 @@ M.execute_script = function(script)
 			on_stdout = function(job_id, data, event)
 				local text = table.concat(data, "\n")
 
-				if config.notify_all_events then
+				if config.notify.stdout.notify_all and not has_keywords(text, config.notify.stdout.exclude) then
+					-- Notify when all stdout is enabled and no exclusions apply
 					notify(text, vim.log.levels.INFO)
-				end
-
-				if
-						not has_ignored_keyword(text, config.ready_events.IGNORED)
-						and config.ready_events.notify
-						and is_ready_event(text)
-						or has_localhost_keyword(text)
-				then
-					notify(text, vim.log.levels.INFO)
-				end
-
-				if
-						not has_ignored_keyword(text, config.warn_events.IGNORED)
-						and config.warn_events.notify
-						and is_warn_event(text)
-				then
-					notify(text, vim.log.levels.WARN)
-				end
-
-				if
-						not has_ignored_keyword(text, config.custom_events.IGNORED)
-						and config.custom_events.notify
-						and is_custom_event(text)
-				then
+				elseif has_keywords(text, config.notify.stdout.keywords) then
+					-- Notify when specific stdout keywords are found
 					notify(text, vim.log.levels.INFO)
 				end
 			end,
@@ -111,33 +69,25 @@ M.execute_script = function(script)
 			on_stderr = function(job_id, data, event)
 				local text = table.concat(data, "\n")
 
-				if config.notify_all_events then
+				if config.notify.stderr.notify_all and not has_keywords(text, config.notify.stderr.exclude) then
+					-- Notify when all stderr is enabled and no exclusions apply
 					notify(text, vim.log.levels.ERROR)
-				end
-
-				if
-						not has_ignored_keyword(text, config.error_events.IGNORED)
-						and config.error_events.notify
-						and is_error_event(text)
-				then
-					notify(text, vim.log.levels.ERROR)
-				end
-
-				if
-						not has_ignored_keyword(text, config.custom_events.IGNORED)
-						and config.custom_events.notify
-						and is_custom_event(text)
-				then
+				elseif has_keywords(text, config.notify.stderr.keywords) then
+					-- Notify when specific stderr keywords are found
 					notify(text, vim.log.levels.ERROR)
 				end
 			end,
 		})
-		notify("Executing script: " .. fullCommand, vim.log.levels.WARN)
+
+		-- Notify that the script is being executed
+		if config.notify.job_finished then
+			notify("Executing script: " .. fullCommand, vim.log.levels.INFO)
+		end
 	end
 end
 
 M.run = function()
-	local nearest_package_json_path = M.find_nearest_package_json(vim.fn.getcwd())
+	local nearest_package_json_path = M.find_package_json_path(vim.fn.getcwd())
 
 	if nearest_package_json_path then
 		local scripts = read_package_json_scripts(nearest_package_json_path)
@@ -149,22 +99,22 @@ M.run = function()
 			end
 
 			pickers
-					.new({
-						prompt_title = "Scripts in package.json",
-						finder = finders.new_table({
-							results = results,
-						}),
-						sorter = sorters.get_generic_fuzzy_sorter(),
-						attach_mappings = function(prompt_bufnr, map)
-							actions.select_default:replace(function()
-								actions.close(prompt_bufnr)
-								local selection = action_state.get_selected_entry()
-								M.execute_script(selection[1])
-							end)
-							return true
-						end,
-					})
-					:find()
+				.new({
+					prompt_title = "Scripts in package.json",
+					finder = finders.new_table({
+						results = results,
+					}),
+					sorter = sorters.get_generic_fuzzy_sorter(),
+					attach_mappings = function(prompt_bufnr, map)
+						actions.select_default:replace(function()
+							actions.close(prompt_bufnr)
+							local selection = action_state.get_selected_entry()
+							M.execute_script(selection[1])
+						end)
+						return true
+					end,
+				})
+				:find()
 		else
 			notify("No 'scripts' found in package.json.", vim.log.levels.WARN)
 		end

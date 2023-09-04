@@ -1,33 +1,29 @@
 local pluginName = "npm-scripts"
 
 local DEFAULT_CONFIG = {
-  ready_events = {
-    notify = true,
-    LOOK_FOR = { "ready", "READY", "Ready" },
-    IGNORED = { "" },
-  },
-  warn_events = {
-    notify = false, -- usefull for linting warnings
-    LOOK_FOR = { "warn", "warning", "WARN", "WARNING", "Warn", "Warning" },
-    IGNORED = { "" },
-  },
-  error_events = {
-    notify = true,
-    LOOK_FOR = { "error", "ERROR", "Error" },
-    IGNORED = { "" }, -- ex: ignore "Watchpack" errors
-  },
-  custom_events = {
-    notify = false,
-    LOOK_FOR = { "whatever", "words", "you", "looking", "for" },
-    IGNORED = { "" },
-  },
-  notify_all_events = false,
-  notify_timeout = 2000,
-  package_manager = "npm",
-  auto_open_localhost = true,
+	auto_open_localhost = true, -- Automatically open localhost in the browser when starting the server
+	package_manager = "npm", -- Package manager to use
+
+	notify = {
+		enabled = true, -- Enable notifications
+		timeout = 2000, -- Notification timeout
+		job_finished = true, -- Notify when the job finishes
+
+		stdout = {
+			notify_all = false, -- Notify all standard outputs
+			keywords = { "ready", "READY", "Ready", "localhost", "Warning" }, -- Keywords to trigger notifications
+			exclude = {}, -- Keywords to exclude from notifications when notify_all is true
+		},
+
+		stderr = {
+			notify_all = true, -- Notify all standard errors
+			keywords = {}, -- Keywords to trigger notifications
+			exclude = { "Watchpack" }, -- Keywords to exclude from notifications when notify_all is true
+		},
+	},
 }
 
 return {
-  DEFAULT_CONFIG = DEFAULT_CONFIG,
-  pluginName = pluginName,
+	DEFAULT_CONFIG = DEFAULT_CONFIG,
+	pluginName = pluginName,
 }
